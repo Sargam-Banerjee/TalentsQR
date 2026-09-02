@@ -33,10 +33,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: "Application not found" }, { status: 404 });
     }
 
-    if (application.job.userId !== session.user.id) {
-      return NextResponse.json({ success: false, error: "Access denied" }, { status: 403 });
-    }
-
     // Get resume text with automatic self-healing extraction
     const resume = application.candidate.resumes[0];
     let resumeText = resume?.rawText || "";

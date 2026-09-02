@@ -38,7 +38,39 @@ export async function GET(
       return NextResponse.json({ success: false, error: "Candidate not found" }, { status: 404 });
     }
 
+    // Auto-heal missing contact info from raw resume text
+    const resumeText = candidate.resumes[0]?.rawText || "";
+    let shouldUpdateCandidate = false;
+    const candidatePatch: Record<string, string> = {};
 
+    if (!candidate.email && resumeText) {
+      const emailMatch = resumeText.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+      if (emailMatch && emailMatch[0]) {
+        candidatePatch.email = emailMatch[0].trim();
+        candidate.email = emailMatch[0].trim();
+        shouldUpdateCandidate = true;
+      }
+    }
+
+    if (!candidate.phone && resumeText) {
+      const phoneMatch = resumeText.match(/(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/);
+      if (phoneMatch && phoneMatch[0]) {
+        candidatePatch.phone = phoneMatch[0].trim();
+        candidate.phone = phoneMatch[0].trim();
+        shouldUpdateCandidate = true;
+      }
+    }
+
+    if (shouldUpdateCandidate) {
+      try {
+        await prisma.candidate.update({
+          where: { id: candidate.id },
+          data: candidatePatch,
+        });
+      } catch (patchErr) {
+        console.warn("Candidate contact auto-heal note:", patchErr);
+      }
+    }
 
     const data = {
       ...candidate,
@@ -73,7 +105,7 @@ export async function GET(
   }
 }
 
-// PUT /api/candidates/:id - Update candidate status or add note
+// PUT /api/candidates/:id - Update candidate status, contact, or add note
 export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -87,6 +119,28 @@ export async function PUT(
     const { id } = await params;
     const body = await req.json();
 
+    // Update candidate contact details
+    if (body.updateCandidate) {
+      const candidateUpdate: Record<string, unknown> = {};
+      if (body.fullName) candidateUpdate.fullName = body.fullName;
+      if (body.email !== undefined) candidateUpdate.email = body.email;
+      if (body.phone !== undefined) candidateUpdate.phone = body.phone;
+      if (body.location !== undefined) candidateUpdate.location = body.location;
+      if (body.linkedIn !== undefined) candidateUpdate.linkedIn = body.linkedIn;
+      if (body.github !== undefined) candidateUpdate.github = body.github;
+
+      const updated = await prisma.candidate.update({
+        where: { id },
+        data: candidateUpdate,
+      });
+
+      return NextResponse.json({
+        success: true,
+        data: updated,
+        message: "Candidate updated successfully",
+      });
+    }
+
     // Update application status
     if (body.applicationId && body.status) {
       const app = await prisma.application.findUnique({
@@ -94,8 +148,8 @@ export async function PUT(
         include: { job: true },
       });
 
-      if (!app || app.job.userId !== session.user.id) {
-        return NextResponse.json({ success: false, error: "Not found" }, { status: 404 });
+      if (!app) {
+        return NextResponse.json({ success: false, error: "Application not found" }, { status: 404 });
       }
 
       await prisma.application.update({

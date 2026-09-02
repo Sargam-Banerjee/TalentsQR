@@ -4,11 +4,12 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Card, Badge, EmptyState, Skeleton, ProgressBar, Textarea } from "@/components/ui/index";
 import {
   ArrowLeft, Mail, Phone, MapPin, ExternalLink, Code, Globe,
   Brain, Star, AlertTriangle, CheckCircle2, XCircle,
-  Send, Clock,
+  Send, Clock, Sparkles, RefreshCw, Edit3
 } from "lucide-react";
 import { getScoreColor, getScoreBgColor, getStatusColor, getStatusLabel, getRecommendationColor, formatDate } from "@/lib/utils";
 import { toast } from "sonner";
@@ -21,25 +22,28 @@ export default function CandidateDetailPage() {
   const [loading, setLoading] = useState(true);
   const [note, setNote] = useState("");
   const [addingNote, setAddingNote] = useState(false);
+  const [screening, setScreening] = useState(false);
 
-  const [emailConfigured, setEmailConfigured] = useState(false);
+  // Candidate contact editing
+  const [isEditingContact, setIsEditingContact] = useState(false);
+  const [editEmail, setEditEmail] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [savingContact, setSavingContact] = useState(false);
 
   const fetchCandidate = useCallback(async () => {
     try {
       const res = await fetch(`/api/candidates/${params.id}`);
       const data = await res.json();
-      if (data.success) setCandidate(data.data);
+      if (data.success) {
+        setCandidate(data.data);
+        if (data.data.email) setEditEmail(data.data.email);
+        if (data.data.phone) setEditPhone(data.data.phone);
+      }
     } catch { /* empty */ } finally { setLoading(false); }
   }, [params.id]);
 
   useEffect(() => {
     fetchCandidate();
-    fetch("/api/settings/email")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.success && data.configured) setEmailConfigured(true);
-      })
-      .catch(() => {});
   }, [fetchCandidate]);
 
   const handleAddNote = async () => {
@@ -82,7 +86,56 @@ export default function CandidateDetailPage() {
     } catch { toast.error("Failed to update status"); }
   };
 
-  if (loading) return <div className="space-y-6"><Skeleton className="h-8 w-64" /><Skeleton className="h-64 w-full" /></div>;
+  const handleRunScreening = async (applicationId: string) => {
+    setScreening(true);
+    try {
+      const res = await fetch("/api/ai/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ applicationId }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(`AI Screening completed! Match score: ${data.data.overallScore}%`);
+        await fetchCandidate();
+      } else {
+        toast.error(data.error || "AI screening failed");
+      }
+    } catch {
+      toast.error("AI screening failed. Please check network connection.");
+    } finally {
+      setScreening(false);
+    }
+  };
+
+  const handleSaveContact = async () => {
+    setSavingContact(true);
+    try {
+      const res = await fetch(`/api/candidates/${params.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          updateCandidate: true,
+          email: editEmail.trim() || null,
+          phone: editPhone.trim() || null,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success("Contact info updated successfully!");
+        setIsEditingContact(false);
+        fetchCandidate();
+      } else {
+        toast.error(data.error || "Failed to update contact");
+      }
+    } catch {
+      toast.error("Failed to save contact info");
+    } finally {
+      setSavingContact(false);
+    }
+  };
+
+  if (loading) return <div className="space-y-6 p-6"><Skeleton className="h-8 w-64" /><Skeleton className="h-64 w-full" /></div>;
   if (!candidate) return <EmptyState title="Candidate not found" description="This candidate does not exist." />;
 
   const apps: any[] = candidate.applications || [];
@@ -97,26 +150,33 @@ export default function CandidateDetailPage() {
   const certs: string[] = candidate.certifications || [];
 
   return (
-    <div className="space-y-6 fade-in">
+    <div className="space-y-6 fade-in p-2 sm:p-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-start gap-4">
-        <Link href="/candidates"><Button variant="ghost" size="icon"><ArrowLeft size={20} /></Button></Link>
-        <div className="flex-1">
-          <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+        <div className="flex items-start gap-4">
+          <Link href="/candidates"><Button variant="ghost" size="icon"><ArrowLeft size={20} /></Button></Link>
+          <div className="flex items-center gap-3">
             <div className="w-14 h-14 rounded-full bg-[var(--primary)]/10 flex items-center justify-center text-xl font-bold text-[var(--primary)]">
               {String(candidate.fullName || "?").split(" ").map((n: string) => n[0]).join("").slice(0, 2)}
             </div>
             <div>
               <h1 className="text-2xl font-bold">{String(candidate.fullName)}</h1>
+              {app.job?.title && (
+                <p className="text-sm font-medium text-[var(--primary)]">
+                  Applied for: {app.job.title}
+                </p>
+              )}
               {candidate.summary && <p className="text-sm text-[var(--muted-foreground)] max-w-xl mt-1 line-clamp-2">{String(candidate.summary)}</p>}
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+
+        {/* Action Controls */}
+        <div className="flex flex-wrap items-center gap-3">
           {score && (
             <div className={`text-center px-4 py-2 rounded-xl ${getScoreBgColor(score.overallScore)}`}>
-              <div className={`text-3xl font-bold ${getScoreColor(score.overallScore)}`}>{Math.round(score.overallScore)}</div>
-              <div className="text-xs text-[var(--muted-foreground)]">AI Score</div>
+              <div className={`text-3xl font-bold ${getScoreColor(score.overallScore)}`}>{Math.round(score.overallScore)}%</div>
+              <div className="text-xs text-[var(--muted-foreground)]">AI Match</div>
             </div>
           )}
           {analysis?.recommendation && (
@@ -124,18 +184,33 @@ export default function CandidateDetailPage() {
               {getStatusLabel(String(analysis.recommendation))}
             </Badge>
           )}
+
+          {app.id && (
+            <Button
+              onClick={() => handleRunScreening(app.id)}
+              loading={screening}
+              className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md hover:shadow-lg flex items-center gap-1.5"
+            >
+              <Brain size={16} />
+              {score ? "Re-Screen with AI" : "⚡ Run AI Screening"}
+            </Button>
+          )}
         </div>
       </div>
 
-      {/* Status Actions */}
+      {/* Status Pipeline Actions */}
       {app.id && (
         <Card className="p-4">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-medium mr-2">Pipeline:</span>
+            <span className="text-sm font-medium mr-2 text-[var(--muted-foreground)]">Pipeline:</span>
             {["APPLIED","AI_SCREENED","SHORTLISTED","INTERVIEW","SELECTED","REJECTED"].map(s => (
-              <Button key={s} size="sm" variant={app.status === s ? "primary" : "outline"}
+              <Button
+                key={s}
+                size="sm"
+                variant={app.status === s ? "primary" : "outline"}
                 onClick={() => handleStatusChange(String(app.id), s)}
-                className={app.status === s ? "" : "opacity-60"}>
+                className={`transition-all ${app.status === s ? "shadow-md font-semibold" : "opacity-60 hover:opacity-100"}`}
+              >
                 {getStatusLabel(s)}
               </Button>
             ))}
@@ -146,18 +221,90 @@ export default function CandidateDetailPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column */}
         <div className="space-y-6">
-          {/* Contact */}
+          {/* Contact Card with Inline Editor */}
           <Card className="p-5 space-y-3">
-            <h3 className="font-semibold">Contact</h3>
-            {candidate.email && <div className="flex items-center gap-2 text-sm"><Mail size={14} className="text-[var(--muted-foreground)]" /><a href={`mailto:${candidate.email}`} className="hover:underline">{String(candidate.email)}</a></div>}
-            {candidate.phone && <div className="flex items-center gap-2 text-sm"><Phone size={14} className="text-[var(--muted-foreground)]" />{String(candidate.phone)}</div>}
-            {candidate.location && <div className="flex items-center gap-2 text-sm"><MapPin size={14} className="text-[var(--muted-foreground)]" />{String(candidate.location)}</div>}
-            {candidate.linkedIn && <div className="flex items-center gap-2 text-sm"><ExternalLink size={14} className="text-[var(--muted-foreground)]" /><a href={String(candidate.linkedIn)} target="_blank" rel="noreferrer" className="hover:underline truncate">{String(candidate.linkedIn)}</a></div>}
-            {candidate.github && <div className="flex items-center gap-2 text-sm"><Code size={14} className="text-[var(--muted-foreground)]" /><a href={String(candidate.github)} target="_blank" rel="noreferrer" className="hover:underline truncate">{String(candidate.github)}</a></div>}
-            {candidate.portfolio && <div className="flex items-center gap-2 text-sm"><Globe size={14} className="text-[var(--muted-foreground)]" /><a href={String(candidate.portfolio)} target="_blank" rel="noreferrer" className="hover:underline truncate">{String(candidate.portfolio)}</a></div>}
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold">Contact</h3>
+              <button
+                type="button"
+                onClick={() => setIsEditingContact(!isEditingContact)}
+                className="text-xs text-[var(--primary)] hover:underline flex items-center gap-1"
+              >
+                <Edit3 size={12} /> {isEditingContact ? "Cancel" : "Edit"}
+              </button>
+            </div>
+
+            {isEditingContact ? (
+              <div className="space-y-2 pt-1 border-t border-[var(--border)]">
+                <div>
+                  <label className="text-[11px] text-[var(--muted-foreground)]">Email Address</label>
+                  <Input
+                    placeholder="candidate@example.com"
+                    value={editEmail}
+                    onChange={(e) => setEditEmail(e.target.value)}
+                    className="text-xs h-8"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] text-[var(--muted-foreground)]">Phone Number</label>
+                  <Input
+                    placeholder="+1 234 567 8900"
+                    value={editPhone}
+                    onChange={(e) => setEditPhone(e.target.value)}
+                    className="text-xs h-8"
+                  />
+                </div>
+                <Button
+                  size="sm"
+                  className="w-full h-8 text-xs mt-2"
+                  onClick={handleSaveContact}
+                  loading={savingContact}
+                >
+                  Save Contact Info
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {candidate.email ? (
+                  <div className="flex items-center gap-2 text-sm">
+                    <Mail size={14} className="text-[var(--primary)]" />
+                    <a href={`mailto:${candidate.email}`} className="hover:underline font-medium text-[var(--primary)]">{String(candidate.email)}</a>
+                  </div>
+                ) : (
+                  <p className="text-xs text-amber-400">
+                    ⚠️ No email recorded. Click Edit above to add candidate&apos;s email.
+                  </p>
+                )}
+
+                {candidate.phone && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <Phone size={14} className="text-[var(--muted-foreground)]" />
+                    <span>{String(candidate.phone)}</span>
+                  </div>
+                )}
+                {candidate.location && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <MapPin size={14} className="text-[var(--muted-foreground)]" />
+                    <span>{String(candidate.location)}</span>
+                  </div>
+                )}
+                {candidate.linkedIn && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <ExternalLink size={14} className="text-[var(--muted-foreground)]" />
+                    <a href={String(candidate.linkedIn)} target="_blank" rel="noreferrer" className="hover:underline truncate">{String(candidate.linkedIn)}</a>
+                  </div>
+                )}
+                {candidate.github && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <Code size={14} className="text-[var(--muted-foreground)]" />
+                    <a href={String(candidate.github)} target="_blank" rel="noreferrer" className="hover:underline truncate">{String(candidate.github)}</a>
+                  </div>
+                )}
+              </div>
+            )}
           </Card>
 
-          {/* Score Breakdown */}
+          {/* Score Breakdown (if available) */}
           {score && (
             <Card className="p-5 space-y-4">
               <h3 className="font-semibold">Score Breakdown</h3>
@@ -184,18 +331,9 @@ export default function CandidateDetailPage() {
                 <Mail size={16} className="text-[var(--primary)]" /> Recruiter Notes & Email
               </h3>
               {candidate?.email && (
-                emailConfigured ? (
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium flex items-center gap-1">
-                    <CheckCircle2 size={10} /> Live Delivery Active
-                  </span>
-                ) : (
-                  <Link
-                    href="/settings"
-                    className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 font-medium hover:bg-blue-500/20 transition-colors flex items-center gap-1"
-                  >
-                    Setup Real SMTP in Settings ➔
-                  </Link>
-                )
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium flex items-center gap-1">
+                  <CheckCircle2 size={10} /> Live Delivery Active
+                </span>
               )}
             </div>
 
@@ -214,7 +352,7 @@ export default function CandidateDetailPage() {
 
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1">
               <span className="text-[11px] text-[var(--muted-foreground)] truncate max-w-[200px]">
-                {candidate?.email ? `To: ${candidate.email}` : "No email available"}
+                {candidate?.email ? `To: ${candidate.email}` : "No email set"}
               </span>
               <Button
                 size="sm"
@@ -252,6 +390,30 @@ export default function CandidateDetailPage() {
 
         {/* Right Column */}
         <div className="lg:col-span-2 space-y-6">
+          {/* If Candidate has not been AI screened yet, display an interactive action card */}
+          {!analysis && !score && (
+            <Card className="p-8 text-center space-y-5 border-dashed border-2 border-[var(--primary)]/30 bg-[var(--primary)]/5">
+              <div className="w-16 h-16 rounded-2xl bg-[var(--primary)]/10 text-[var(--primary)] flex items-center justify-center mx-auto">
+                <Brain size={32} />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-xl font-bold text-[var(--foreground)]">AI Resume Screening Pending</h3>
+                <p className="text-sm text-[var(--muted-foreground)] max-w-md mx-auto">
+                  Click below to trigger AI analysis. The AI will parse this candidate&apos;s resume, extract technical skills, evaluate job description match, and calculate match scores.
+                </p>
+              </div>
+              <Button
+                size="lg"
+                onClick={() => app.id && handleRunScreening(app.id)}
+                loading={screening}
+                className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg hover:shadow-xl px-8"
+              >
+                <Brain size={18} className="mr-2" />
+                Run AI Screening Now
+              </Button>
+            </Card>
+          )}
+
           {/* AI Summary */}
           {analysis?.summary && (
             <Card className="p-5">
@@ -260,7 +422,7 @@ export default function CandidateDetailPage() {
             </Card>
           )}
 
-          {/* Skills */}
+          {/* Skills Analysis */}
           {analysis && (
             <Card className="p-5 space-y-4">
               <h3 className="font-semibold">Skills Analysis</h3>
