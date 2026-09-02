@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getValidUserId } from "@/lib/user-helper";
 
 // GET /api/jobs - List jobs for current user
 export async function GET(req: NextRequest) {
@@ -127,38 +128,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Resilient userId resolution to prevent foreign key constraint failures
-    let userId = session.user.id;
-    const userExists = await prisma.user.findUnique({ where: { id: userId } });
-    if (!userExists) {
-      if (session.user.email) {
-        const userByEmail = await prisma.user.findUnique({
-          where: { email: session.user.email.toLowerCase() },
-        });
-        if (userByEmail) {
-          userId = userByEmail.id;
-        } else {
-          const fallbackUser = await prisma.user.findFirst();
-          if (fallbackUser) {
-            userId = fallbackUser.id;
-          } else {
-            const newUser = await prisma.user.create({
-              data: {
-                id: session.user.id,
-                email: session.user.email.toLowerCase(),
-                name: session.user.name || "Recruiter",
-                password: "auto_provisioned_account",
-                role: "RECRUITER",
-              },
-            });
-            userId = newUser.id;
-          }
-        }
-      } else {
-        const fallbackUser = await prisma.user.findFirst();
-        if (fallbackUser) userId = fallbackUser.id;
-      }
-    }
+    const userId = await getValidUserId(session.user);
 
     const parsedSalaryMin =
       salaryMin !== undefined && salaryMin !== null && String(salaryMin).trim() !== "" && !isNaN(parseInt(String(salaryMin).replace(/[^0-9]/g, "")))

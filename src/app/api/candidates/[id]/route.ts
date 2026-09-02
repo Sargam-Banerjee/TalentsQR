@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getValidUserId } from "@/lib/user-helper";
 
 // GET /api/candidates/:id
 export async function GET(
@@ -102,16 +103,22 @@ export async function PUT(
         data: { status: body.status },
       });
 
-      // Create notification
-      await prisma.notification.create({
-        data: {
-          title: "Candidate Status Updated",
-          message: `Candidate moved to ${body.status} stage`,
-          type: "INFO",
-          userId: session.user.id,
-          link: `/candidates/${id}`,
-        },
-      });
+      const validUserId = await getValidUserId(session.user);
+
+      // Create notification safely
+      try {
+        await prisma.notification.create({
+          data: {
+            title: "Candidate Status Updated",
+            message: `Candidate moved to ${body.status} stage`,
+            type: "INFO",
+            userId: validUserId,
+            link: `/candidates/${id}`,
+          },
+        });
+      } catch (notifErr) {
+        console.warn("Status notification note:", notifErr);
+      }
 
       return NextResponse.json({
         success: true,
@@ -135,11 +142,13 @@ export async function PUT(
         return NextResponse.json({ success: false, error: "Candidate not found" }, { status: 404 });
       }
 
+      const validUserId = await getValidUserId(session.user);
+
       await prisma.recruiterNote.create({
         data: {
           content: body.note,
           candidateId: id,
-          userId: session.user.id,
+          userId: validUserId,
         },
       });
 

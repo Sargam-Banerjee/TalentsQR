@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { writeFile, mkdir } from "fs/promises";
 import { join } from "path";
 import { v4 as uuidv4 } from "uuid";
+import { getValidUserId } from "@/lib/user-helper";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const ALLOWED_TYPES = [
@@ -134,18 +135,23 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Create notification
+    // Create notification safely
     const successCount = results.filter(r => r.success).length;
     if (successCount > 0) {
-      await prisma.notification.create({
-        data: {
-          title: "Resumes Uploaded",
-          message: `${successCount} resume${successCount > 1 ? "s" : ""} uploaded successfully for "${job.title}".`,
-          type: "SUCCESS",
-          userId: session.user.id,
-          link: `/jobs/${jobId}`,
-        },
-      });
+      try {
+        const validUserId = await getValidUserId(session.user);
+        await prisma.notification.create({
+          data: {
+            title: "Resumes Uploaded",
+            message: `${successCount} resume${successCount > 1 ? "s" : ""} uploaded successfully for "${job.title}".`,
+            type: "SUCCESS",
+            userId: validUserId,
+            link: `/jobs/${jobId}`,
+          },
+        });
+      } catch (notifErr) {
+        console.warn("Notification creation note:", notifErr);
+      }
     }
 
     return NextResponse.json({
