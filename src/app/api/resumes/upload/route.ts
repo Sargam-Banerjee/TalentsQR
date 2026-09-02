@@ -1,0 +1,163 @@
+import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { writeFile, mkdir } from "fs/promises";
+import { join } from "path";
+import { v4 as uuidv4 } from "uuid";
+
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const ALLOWED_TYPES = [
+  "application/pdf",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+];
+
+// POST /api/resumes/upload
+export async function POST(req: NextRequest) {
+  try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
+    const formData = await req.formData();
+    const jobId = formData.get("jobId") as string;
+    const files = formData.getAll("files") as File[];
+
+    if (!jobId) {
+      return NextResponse.json({ success: false, error: "Job ID is required" }, { status: 400 });
+    }
+
+    // Verify job ownership
+    const job = await prisma.job.findFirst({
+      where: { id: jobId, userId: session.user.id },
+    });
+
+    if (!job) {
+      return NextResponse.json({ success: false, error: "Job not found" }, { status: 404 });
+    }
+
+    if (files.length === 0) {
+      return NextResponse.json({ success: false, error: "No files uploaded" }, { status: 400 });
+    }
+
+    const results = [];
+
+    for (const file of files) {
+      try {
+        // Validate file type
+        if (!ALLOWED_TYPES.includes(file.type)) {
+          results.push({
+            fileName: file.name,
+            success: false,
+            error: "Invalid file type. Only PDF and DOCX are supported.",
+          });
+          continue;
+        }
+
+        // Validate file size
+        if (file.size > MAX_FILE_SIZE) {
+          results.push({
+            fileName: file.name,
+            success: false,
+            error: "File too large. Maximum size is 10MB.",
+          });
+          continue;
+        }
+
+        // Save file
+        const uploadDir = join(process.cwd(), "uploads");
+        await mkdir(uploadDir, { recursive: true });
+
+        const fileExt = file.name.split(".").pop() || "pdf";
+        const uniqueName = `${uuidv4()}.${fileExt}`;
+        const filePath = join(uploadDir, uniqueName);
+
+        const arrayBuffer = await file.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+        await writeFile(filePath, buffer);
+
+        // Extract text from the file using universal parser
+        const { extractResumeText } = await import("@/lib/resume-parser");
+        const rawText = await extractResumeText(buffer, file.type, file.name);
+
+        // Create candidate (or find existing by email if extractable)
+        const candidate = await prisma.candidate.create({
+          data: {
+            fullName: file.name.replace(/\.(pdf|docx)$/i, "").replace(/[_-]/g, " "),
+            skills: "[]",
+            experience: "[]",
+            education: "[]",
+            projects: "[]",
+            certifications: "[]",
+            achievements: "[]",
+            languages: "[]",
+          },
+        });
+
+        // Create resume record
+        const resume = await prisma.resume.create({
+          data: {
+            fileName: file.name,
+            fileType: file.type,
+            filePath: uniqueName,
+            fileSize: file.size,
+            rawText,
+            candidateId: candidate.id,
+            parseStatus: rawText ? "PARSED" : "FAILED",
+          },
+        });
+
+        // Create application
+        const application = await prisma.application.create({
+          data: {
+            candidateId: candidate.id,
+            jobId,
+            status: "APPLIED",
+          },
+        });
+
+        results.push({
+          fileName: file.name,
+          success: true,
+          candidateId: candidate.id,
+          resumeId: resume.id,
+          applicationId: application.id,
+          hasText: !!rawText,
+        });
+      } catch (fileError) {
+        console.error("Error processing file:", file.name, fileError);
+        results.push({
+          fileName: file.name,
+          success: false,
+          error: "Failed to process this file.",
+        });
+      }
+    }
+
+    // Create notification
+    const successCount = results.filter(r => r.success).length;
+    if (successCount > 0) {
+      await prisma.notification.create({
+        data: {
+          title: "Resumes Uploaded",
+          message: `${successCount} resume${successCount > 1 ? "s" : ""} uploaded successfully for "${job.title}".`,
+          type: "SUCCESS",
+          userId: session.user.id,
+          link: `/jobs/${jobId}`,
+        },
+      });
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: results,
+      message: `${successCount} of ${files.length} files processed successfully`,
+    });
+  } catch (error) {
+    console.error("Resume upload error:", error);
+    return NextResponse.json(
+      { success: false, error: "Failed to upload resumes" },
+      { status: 500 }
+    );
+  }
+}

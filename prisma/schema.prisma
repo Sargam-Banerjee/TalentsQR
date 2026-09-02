@@ -1,0 +1,290 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// ENUMS (simulated via String for SQLite)
+// In PostgreSQL, replace with native enums
+// ============================================
+
+// User roles: RECRUITER, ADMIN, HIRING_MANAGER
+// Job status: DRAFT, ACTIVE, PAUSED, CLOSED, ARCHIVED
+// Application status: APPLIED, AI_SCREENED, SHORTLISTED, INTERVIEW, SELECTED, REJECTED
+// Employment type: FULL_TIME, PART_TIME, CONTRACT, INTERNSHIP, FREELANCE
+// Experience level: ENTRY, MID, SENIOR, LEAD, EXECUTIVE
+
+// ============================================
+// MODELS
+// ============================================
+
+model User {
+  id             String   @id @default(cuid())
+  name           String
+  email          String   @unique
+  password       String
+  role           String   @default("RECRUITER")
+  avatar         String?
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  
+  jobs           Job[]
+  notes          RecruiterNote[]
+  notifications  Notification[]
+  conversations  AIConversation[]
+  
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Organization {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  website     String?
+  logo        String?
+  
+  users       User[]
+  jobs        Job[]
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Job {
+  id               String   @id @default(cuid())
+  title            String
+  department       String?
+  location         String?
+  employmentType   String   @default("FULL_TIME")
+  experienceLevel  String   @default("MID")
+  salaryMin        Int?
+  salaryMax        Int?
+  salaryCurrency   String   @default("USD")
+  status           String   @default("ACTIVE")
+  
+  description      String
+  responsibilities String?
+  qualifications   String?
+  
+  requiredSkills   String   @default("[]") // JSON array stored as string
+  preferredSkills  String   @default("[]") // JSON array stored as string
+  
+  educationReq     String?
+  experienceReq    String?
+  
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organizationId   String?
+  organization     Organization? @relation(fields: [organizationId], references: [id])
+  
+  applications     Application[]
+  
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([userId])
+  @@index([status])
+}
+
+model Candidate {
+  id           String   @id @default(cuid())
+  fullName     String
+  email        String?
+  phone        String?
+  location     String?
+  linkedIn     String?
+  github       String?
+  portfolio    String?
+  summary      String?
+  
+  skills       String   @default("[]") // JSON array
+  experience   String   @default("[]") // JSON array of work experience objects
+  education    String   @default("[]") // JSON array of education objects
+  projects     String   @default("[]") // JSON array of project objects
+  certifications String @default("[]") // JSON array
+  achievements String   @default("[]") // JSON array
+  languages    String   @default("[]") // JSON array
+  
+  applications Application[]
+  resumes      Resume[]
+  notes        RecruiterNote[]
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([email])
+  @@index([fullName])
+}
+
+model Resume {
+  id           String   @id @default(cuid())
+  fileName     String
+  fileType     String
+  filePath     String
+  fileSize     Int
+  rawText      String?
+  
+  candidateId  String
+  candidate    Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  
+  parsedData   String?  // JSON - full parsed resume data
+  parseStatus  String   @default("PENDING") // PENDING, PARSING, PARSED, FAILED
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([candidateId])
+}
+
+model Application {
+  id           String   @id @default(cuid())
+  status       String   @default("APPLIED")
+  
+  candidateId  String
+  candidate    Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  jobId        String
+  job          Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  
+  analysis     CandidateAnalysis?
+  score        CandidateScore?
+  
+  appliedAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([candidateId, jobId])
+  @@index([jobId])
+  @@index([candidateId])
+  @@index([status])
+}
+
+model CandidateAnalysis {
+  id              String   @id @default(cuid())
+  
+  applicationId   String   @unique
+  application     Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  
+  summary         String?
+  matchingSkills  String   @default("[]") // JSON array
+  missingSkills   String   @default("[]") // JSON array
+  additionalSkills String  @default("[]") // JSON array
+  
+  experienceAnalysis String? // JSON object
+  educationAnalysis  String? // JSON object
+  projectAnalysis    String? // JSON object
+  
+  strengths       String   @default("[]") // JSON array
+  weaknesses      String   @default("[]") // JSON array
+  missingReqs     String   @default("[]") // JSON array
+  
+  recommendation  String?  // STRONG_MATCH, GOOD_MATCH, MODERATE_MATCH, WEAK_MATCH
+  
+  rawResponse     String?  // Full AI response for debugging
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model CandidateScore {
+  id              String   @id @default(cuid())
+  
+  applicationId   String   @unique
+  application     Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  
+  overallScore    Float    @default(0)
+  
+  technicalScore  Float    @default(0) // 30% weight
+  experienceScore Float    @default(0) // 20% weight
+  jdMatchScore    Float    @default(0) // 20% weight
+  projectScore    Float    @default(0) // 15% weight
+  educationScore  Float    @default(0) // 10% weight
+  certScore       Float    @default(0) // 5% weight
+  
+  technicalExplanation  String?
+  experienceExplanation String?
+  jdMatchExplanation    String?
+  projectExplanation    String?
+  educationExplanation  String?
+  certExplanation       String?
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model RecruiterNote {
+  id           String   @id @default(cuid())
+  content      String
+  
+  candidateId  String
+  candidate    Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([candidateId])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  title     String
+  message   String
+  type      String   @default("INFO") // INFO, SUCCESS, WARNING, ERROR
+  read      Boolean  @default(false)
+  link      String?
+  
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  createdAt DateTime @default(now())
+
+  @@index([userId, read])
+}
+
+model AIConversation {
+  id        String   @id @default(cuid())
+  title     String   @default("New Conversation")
+  
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  messages  AIMessage[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model AIMessage {
+  id             String   @id @default(cuid())
+  role           String   // user, assistant
+  content        String
+  
+  conversationId String
+  conversation   AIConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  
+  createdAt      DateTime @default(now())
+
+  @@index([conversationId])
+}
+
+model ScoringConfig {
+  id               String @id @default(cuid())
+  userId           String @unique
+  
+  technicalWeight  Float  @default(30)
+  experienceWeight Float  @default(20)
+  jdMatchWeight    Float  @default(20)
+  projectWeight    Float  @default(15)
+  educationWeight  Float  @default(10)
+  certWeight       Float  @default(5)
+  
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
