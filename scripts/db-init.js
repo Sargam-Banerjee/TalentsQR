@@ -1,5 +1,11 @@
-const { execSync } = require("child_process");
-const { PrismaClient } = require("@prisma/client");
+// Fallback to local SQLite file database if not provided by cloud environment
+if (!process.env.DATABASE_URL) {
+  process.env.DATABASE_URL = "file:./dev.db";
+}
+
+if (!process.env.AUTH_SECRET) {
+  process.env.AUTH_SECRET = "talentsqr-production-resilient-fallback-secret-2026";
+}
 
 console.log("🔄 Ensuring database schema is ready...");
 try {
