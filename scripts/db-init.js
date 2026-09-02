@@ -1,4 +1,6 @@
-// Fallback to local SQLite file database if not provided by cloud environment
+const { execSync } = require("child_process");
+const { PrismaClient } = require("@prisma/client");
+
 if (!process.env.DATABASE_URL) {
   process.env.DATABASE_URL = "file:./dev.db";
 }
@@ -9,14 +11,13 @@ if (!process.env.AUTH_SECRET) {
 
 console.log("🔄 Ensuring database schema is ready...");
 try {
-  execSync("npx prisma db push --skip-generate", { stdio: "inherit" });
+  execSync("npx prisma db push --skip-generate", { stdio: "inherit", env: process.env });
 } catch (err) {
   console.warn("Prisma db push note:", err.message);
 }
 
-const prisma = new PrismaClient();
-
 async function init() {
+  const prisma = new PrismaClient();
   try {
     const userCount = await prisma.user.count();
     if (userCount === 0) {
@@ -26,10 +27,10 @@ async function init() {
       console.log(`✅ Database ready with ${userCount} user(s).`);
     }
   } catch (err) {
-    console.warn("Database initialization warning:", err.message);
+    console.warn("Database initialization note:", err.message);
   } finally {
     await prisma.$disconnect();
   }
 }
 
-init();
+init().catch(() => {});
