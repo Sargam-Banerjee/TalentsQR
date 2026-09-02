@@ -26,10 +26,10 @@ export async function sendCandidateNoteEmail({
   jobTitle,
 }: SendNoteEmailParams): Promise<EmailSendResult> {
   const resendApiKey = process.env.RESEND_API_KEY;
-  const host = process.env.SMTP_HOST;
+  const host = process.env.SMTP_HOST || "smtp.gmail.com";
   const port = parseInt(process.env.SMTP_PORT || "587");
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
+  const user = process.env.SMTP_USER || "melomaniac210@gmail.com";
+  const pass = process.env.SMTP_PASS || "slsm ezbc siam eydr";
   const fromName = process.env.SMTP_FROM_NAME || "FicTOrealism";
   const fromEmail = process.env.SMTP_FROM_EMAIL || user || "melomaniac210@gmail.com";
   const from = process.env.SMTP_FROM || `"${fromName}" <${fromEmail}>`;

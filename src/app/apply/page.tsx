@@ -501,14 +501,10 @@ export default function PublicApplicationPage() {
             </span>
           </Link>
 
-          <div className="text-xs text-gray-400 flex items-center gap-3">
-            <span>Recruiter login?</span>
-            <Link
-              href="/login"
-              className="px-3 py-1.5 rounded-lg border border-white/10 hover:border-white/20 text-white transition-all font-medium"
-            >
-              Sign In
-            </Link>
+          <div className="flex items-center gap-2">
+            <span className="text-xs px-2.5 py-1 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 font-medium">
+              Candidate Portal
+            </span>
           </div>
         </div>
       </header>

@@ -11,6 +11,14 @@ if (!process.env.AUTH_SECRET) {
 
 process.env.AUTH_TRUST_HOST = "true";
 
+if (!process.env.SMTP_HOST) process.env.SMTP_HOST = "smtp.gmail.com";
+if (!process.env.SMTP_PORT) process.env.SMTP_PORT = "587";
+if (!process.env.SMTP_USER) process.env.SMTP_USER = "melomaniac210@gmail.com";
+if (!process.env.SMTP_PASS) process.env.SMTP_PASS = "slsm ezbc siam eydr";
+if (!process.env.SMTP_FROM_NAME) process.env.SMTP_FROM_NAME = "FicTOrealism";
+if (!process.env.SMTP_FROM_EMAIL) process.env.SMTP_FROM_EMAIL = "melomaniac210@gmail.com";
+if (!process.env.SMTP_FROM) process.env.SMTP_FROM = '"FicTOrealism" <melomaniac210@gmail.com>';
+
 console.log("🔄 Ensuring database schema is ready...");
 try {
   execSync("npx prisma db push --skip-generate", { stdio: "inherit", env: process.env });
