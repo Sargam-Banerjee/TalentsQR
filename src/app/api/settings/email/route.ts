@@ -65,9 +65,14 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Action: Save configuration to .env
+    // Action: Save configuration to in-memory process.env and .env if writable
     const envPath = join(process.cwd(), ".env");
-    let envContent = await readFile(envPath, "utf-8");
+    let envContent = "";
+    try {
+      envContent = await readFile(envPath, "utf-8");
+    } catch {
+      envContent = "";
+    }
 
     if (provider === "resend" && resendApiKey) {
       process.env.RESEND_API_KEY = resendApiKey;
@@ -107,9 +112,15 @@ export async function POST(req: NextRequest) {
           ? envContent.replace(/SMTP_FROM=.*/g, `SMTP_FROM="${smtpFrom}"`)
           : envContent + `\nSMTP_FROM="${smtpFrom}"`;
       }
+      process.env.SMTP_FROM_NAME = "FicTOrealism";
+      process.env.SMTP_FROM_EMAIL = smtpUser || "melomaniac210@gmail.com";
     }
 
-    await writeFile(envPath, envContent);
+    try {
+      await writeFile(envPath, envContent);
+    } catch (writeErr) {
+      console.warn("Could not write to .env file on disk (read-only environment):", writeErr);
+    }
 
     return NextResponse.json({
       success: true,
