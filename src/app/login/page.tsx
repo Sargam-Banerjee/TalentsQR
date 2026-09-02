@@ -141,8 +141,20 @@ export default function LoginPage() {
               </Button>
             </form>
 
-            <div className="text-center text-xs text-[var(--muted-foreground)]">
-              Demo credentials: <span className="font-mono">demo@talentsqr.com</span> / <span className="font-mono">demo1234</span>
+            <div className="pt-3 border-t border-[var(--border)] text-center space-y-2">
+              <div className="text-xs text-[var(--muted-foreground)]">
+                Demo account: <span className="font-mono text-[var(--foreground)]">demo@talentsqr.com</span> / <span className="font-mono text-[var(--foreground)]">demo1234</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setEmail("demo@talentsqr.com");
+                  setPassword("demo1234");
+                }}
+                className="text-xs text-[var(--primary)] hover:underline font-medium"
+              >
+                Click to Auto-Fill Credentials ➔
+              </button>
             </div>
           </div>
         </div>

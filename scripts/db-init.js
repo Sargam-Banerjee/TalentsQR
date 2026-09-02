@@ -9,6 +9,8 @@ if (!process.env.AUTH_SECRET) {
   process.env.AUTH_SECRET = "talentsqr-production-resilient-fallback-secret-2026";
 }
 
+process.env.AUTH_TRUST_HOST = "true";
+
 console.log("🔄 Ensuring database schema is ready...");
 try {
   execSync("npx prisma db push --skip-generate", { stdio: "inherit", env: process.env });

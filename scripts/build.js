@@ -10,6 +10,8 @@ if (!process.env.AUTH_SECRET) {
   process.env.AUTH_SECRET = "talentsqr-production-resilient-fallback-secret-2026";
 }
 
+process.env.AUTH_TRUST_HOST = "true";
+
 console.log("📦 Generating Prisma client...");
 execSync("npx prisma generate", { stdio: "inherit", env: process.env });
 
