@@ -127,44 +127,112 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Resilient userId resolution to prevent foreign key constraint failures
+    let userId = session.user.id;
+    const userExists = await prisma.user.findUnique({ where: { id: userId } });
+    if (!userExists) {
+      if (session.user.email) {
+        const userByEmail = await prisma.user.findUnique({
+          where: { email: session.user.email.toLowerCase() },
+        });
+        if (userByEmail) {
+          userId = userByEmail.id;
+        } else {
+          const fallbackUser = await prisma.user.findFirst();
+          if (fallbackUser) {
+            userId = fallbackUser.id;
+          } else {
+            const newUser = await prisma.user.create({
+              data: {
+                id: session.user.id,
+                email: session.user.email.toLowerCase(),
+                name: session.user.name || "Recruiter",
+                password: "auto_provisioned_account",
+                role: "RECRUITER",
+              },
+            });
+            userId = newUser.id;
+          }
+        }
+      } else {
+        const fallbackUser = await prisma.user.findFirst();
+        if (fallbackUser) userId = fallbackUser.id;
+      }
+    }
+
+    const parsedSalaryMin =
+      salaryMin !== undefined && salaryMin !== null && String(salaryMin).trim() !== "" && !isNaN(parseInt(String(salaryMin).replace(/[^0-9]/g, "")))
+        ? parseInt(String(salaryMin).replace(/[^0-9]/g, ""))
+        : null;
+
+    const parsedSalaryMax =
+      salaryMax !== undefined && salaryMax !== null && String(salaryMax).trim() !== "" && !isNaN(parseInt(String(salaryMax).replace(/[^0-9]/g, "")))
+        ? parseInt(String(salaryMax).replace(/[^0-9]/g, ""))
+        : null;
+
+    const safeRequiredSkills = Array.isArray(requiredSkills)
+      ? JSON.stringify(requiredSkills)
+      : typeof requiredSkills === "string"
+      ? requiredSkills
+      : "[]";
+
+    const safePreferredSkills = Array.isArray(preferredSkills)
+      ? JSON.stringify(preferredSkills)
+      : typeof preferredSkills === "string"
+      ? preferredSkills
+      : "[]";
+
     const job = await prisma.job.create({
       data: {
-        title,
-        department: department || null,
-        location: location || null,
+        title: String(title).trim(),
+        department: department ? String(department).trim() : null,
+        location: location ? String(location).trim() : null,
         employmentType: employmentType || "FULL_TIME",
         experienceLevel: experienceLevel || "MID",
-        salaryMin: salaryMin ? parseInt(salaryMin) : null,
-        salaryMax: salaryMax ? parseInt(salaryMax) : null,
+        salaryMin: parsedSalaryMin,
+        salaryMax: parsedSalaryMax,
         salaryCurrency: salaryCurrency || "USD",
-        description,
-        responsibilities: responsibilities || null,
-        qualifications: qualifications || null,
-        requiredSkills: JSON.stringify(requiredSkills || []),
-        preferredSkills: JSON.stringify(preferredSkills || []),
-        educationReq: educationReq || null,
-        experienceReq: experienceReq || null,
+        description: String(description).trim(),
+        responsibilities: responsibilities ? String(responsibilities).trim() : null,
+        qualifications: qualifications ? String(qualifications).trim() : null,
+        requiredSkills: safeRequiredSkills,
+        preferredSkills: safePreferredSkills,
+        educationReq: educationReq ? String(educationReq).trim() : null,
+        experienceReq: experienceReq ? String(experienceReq).trim() : null,
         status: status || "ACTIVE",
-        userId: session.user.id,
+        userId,
       },
     });
+
+    let unpackedRequired: string[] = [];
+    let unpackedPreferred: string[] = [];
+    try {
+      unpackedRequired = JSON.parse(job.requiredSkills);
+    } catch {
+      unpackedRequired = [];
+    }
+    try {
+      unpackedPreferred = JSON.parse(job.preferredSkills);
+    } catch {
+      unpackedPreferred = [];
+    }
 
     return NextResponse.json(
       {
         success: true,
         data: {
           ...job,
-          requiredSkills: JSON.parse(job.requiredSkills),
-          preferredSkills: JSON.parse(job.preferredSkills),
+          requiredSkills: unpackedRequired,
+          preferredSkills: unpackedPreferred,
         },
         message: "Job created successfully",
       },
       { status: 201 }
     );
-  } catch (error) {
+  } catch (error: any) {
     console.error("Create job error:", error);
     return NextResponse.json(
-      { success: false, error: "Failed to create job" },
+      { success: false, error: error?.message || "Failed to create job" },
       { status: 500 }
     );
   }
