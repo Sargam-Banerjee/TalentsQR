@@ -72,6 +72,142 @@ export async function GET(
       }
     }
 
+    // Auto-screen candidate on the fly if application has no score or analysis
+    const primaryApp = candidate.applications[0];
+    if (primaryApp && (!primaryApp.score || !primaryApp.analysis)) {
+      try {
+        const { getAIProvider } = await import("@/services/ai/provider");
+        const ai = await getAIProvider();
+        let resumeContent = candidate.resumes[0]?.rawText || "";
+        if (!resumeContent && candidate.resumes[0]?.filePath) {
+          try {
+            const { readFile } = await import("fs/promises");
+            const { join } = await import("path");
+            const { existsSync } = await import("fs");
+            const p = join(process.cwd(), "uploads", candidate.resumes[0].filePath);
+            if (existsSync(p)) {
+              const buf = await readFile(p);
+              const { extractResumeText } = await import("@/lib/resume-parser");
+              resumeContent = await extractResumeText(buf, candidate.resumes[0].fileType, candidate.resumes[0].fileName);
+              if (resumeContent) {
+                await prisma.resume.update({ where: { id: candidate.resumes[0].id }, data: { rawText: resumeContent } });
+              }
+            }
+          } catch {}
+        }
+
+        const analysis = await ai.analyzeResume(
+          resumeContent || `${candidate.fullName}'s resume`,
+          primaryApp.job.description,
+          primaryApp.job.title
+        );
+
+        if (analysis.candidateInfo) {
+          const info = analysis.candidateInfo;
+          const patchInfo: Record<string, unknown> = {};
+          if (!candidate.fullName || candidate.fullName.includes(".pdf") || candidate.fullName.includes("Resume")) {
+            if (info.fullName) { patchInfo.fullName = info.fullName; candidate.fullName = info.fullName; }
+          }
+          if (!candidate.email && info.email) { patchInfo.email = info.email; candidate.email = info.email; }
+          if (!candidate.phone && info.phone) { patchInfo.phone = info.phone; candidate.phone = info.phone; }
+          if (info.location) { patchInfo.location = info.location; candidate.location = info.location; }
+          if (info.skills?.length) { patchInfo.skills = JSON.stringify(info.skills); candidate.skills = JSON.stringify(info.skills); }
+          if (info.experience?.length) { patchInfo.experience = JSON.stringify(info.experience); candidate.experience = JSON.stringify(info.experience); }
+          if (info.education?.length) { patchInfo.education = JSON.stringify(info.education); candidate.education = JSON.stringify(info.education); }
+          if (info.projects?.length) { patchInfo.projects = JSON.stringify(info.projects); candidate.projects = JSON.stringify(info.projects); }
+          if (info.summary) { patchInfo.summary = info.summary; candidate.summary = info.summary; }
+
+          await prisma.candidate.update({
+            where: { id: candidate.id },
+            data: patchInfo,
+          });
+        }
+
+        const s = analysis.scores;
+        const overallScore = Math.round(
+          (s.technical.score * 0.30) +
+          (s.experience.score * 0.20) +
+          (s.jdMatch.score * 0.20) +
+          (s.projects.score * 0.15) +
+          (s.education.score * 0.10) +
+          (s.certifications.score * 0.05)
+        );
+
+        const createdAnalysis = await prisma.candidateAnalysis.upsert({
+          where: { applicationId: primaryApp.id },
+          create: {
+            applicationId: primaryApp.id,
+            summary: analysis.summary,
+            matchingSkills: JSON.stringify(analysis.matchingSkills || []),
+            missingSkills: JSON.stringify(analysis.missingSkills || []),
+            additionalSkills: JSON.stringify(analysis.additionalSkills || []),
+            strengths: JSON.stringify(analysis.strengths || []),
+            weaknesses: JSON.stringify(analysis.weaknesses || []),
+            missingReqs: JSON.stringify(analysis.missingRequirements || []),
+            recommendation: analysis.recommendation,
+            rawResponse: JSON.stringify(analysis),
+          },
+          update: {
+            summary: analysis.summary,
+            matchingSkills: JSON.stringify(analysis.matchingSkills || []),
+            missingSkills: JSON.stringify(analysis.missingSkills || []),
+            additionalSkills: JSON.stringify(analysis.additionalSkills || []),
+            strengths: JSON.stringify(analysis.strengths || []),
+            weaknesses: JSON.stringify(analysis.weaknesses || []),
+            missingReqs: JSON.stringify(analysis.missingRequirements || []),
+            recommendation: analysis.recommendation,
+            rawResponse: JSON.stringify(analysis),
+          },
+        });
+
+        const createdScore = await prisma.candidateScore.upsert({
+          where: { applicationId: primaryApp.id },
+          create: {
+            applicationId: primaryApp.id,
+            overallScore,
+            technicalScore: s.technical.score,
+            experienceScore: s.experience.score,
+            jdMatchScore: s.jdMatch.score,
+            projectScore: s.projects.score,
+            educationScore: s.education.score,
+            certScore: s.certifications.score,
+            technicalExplanation: s.technical.explanation,
+            experienceExplanation: s.experience.explanation,
+            jdMatchExplanation: s.jdMatch.explanation,
+            projectExplanation: s.projects.explanation,
+            educationExplanation: s.education.explanation,
+            certExplanation: s.certifications.explanation,
+          },
+          update: {
+            overallScore,
+            technicalScore: s.technical.score,
+            experienceScore: s.experience.score,
+            jdMatchScore: s.jdMatch.score,
+            projectScore: s.projects.score,
+            educationScore: s.education.score,
+            certScore: s.certifications.score,
+            technicalExplanation: s.technical.explanation,
+            experienceExplanation: s.experience.explanation,
+            jdMatchExplanation: s.jdMatch.explanation,
+            projectExplanation: s.projects.explanation,
+            educationExplanation: s.education.explanation,
+            certExplanation: s.certifications.explanation,
+          },
+        });
+
+        primaryApp.analysis = createdAnalysis;
+        primaryApp.score = createdScore;
+        primaryApp.status = "AI_SCREENED";
+
+        await prisma.application.update({
+          where: { id: primaryApp.id },
+          data: { status: "AI_SCREENED" },
+        });
+      } catch (autoErr) {
+        console.warn("Auto-screening on candidate detail GET note:", autoErr);
+      }
+    }
+
     const data = {
       ...candidate,
       skills: JSON.parse(candidate.skills || "[]"),
