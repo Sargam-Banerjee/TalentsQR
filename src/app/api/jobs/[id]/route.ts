@@ -16,7 +16,7 @@ export async function GET(
     const { id } = await params;
 
     const job = await prisma.job.findFirst({
-      where: { id, userId: session.user.id },
+      where: { id },
       include: {
         applications: {
           include: {
@@ -72,9 +72,9 @@ export async function PUT(
     const { id } = await params;
     const body = await req.json();
 
-    // Verify ownership
+    // Verify job exists
     const existing = await prisma.job.findFirst({
-      where: { id, userId: session.user.id },
+      where: { id },
     });
 
     if (!existing) {
@@ -133,7 +133,7 @@ export async function DELETE(
     const { id } = await params;
 
     const existing = await prisma.job.findFirst({
-      where: { id, userId: session.user.id },
+      where: { id },
     });
 
     if (!existing) {

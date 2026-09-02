@@ -37,17 +37,7 @@ export async function GET(
       return NextResponse.json({ success: false, error: "Candidate not found" }, { status: 404 });
     }
 
-    // Verify the candidate belongs to one of the user's jobs
-    const userJobs = await prisma.job.findMany({
-      where: { userId: session.user.id },
-      select: { id: true },
-    });
-    const jobIds = new Set(userJobs.map(j => j.id));
-    const hasAccess = candidate.applications.some(app => jobIds.has(app.jobId));
 
-    if (!hasAccess) {
-      return NextResponse.json({ success: false, error: "Access denied" }, { status: 403 });
-    }
 
     const data = {
       ...candidate,

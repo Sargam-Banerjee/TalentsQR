@@ -27,9 +27,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: "Job ID is required" }, { status: 400 });
     }
 
-    // Verify job ownership
+    // Verify job exists
     const job = await prisma.job.findFirst({
-      where: { id: jobId, userId: session.user.id },
+      where: { id: jobId },
     });
 
     if (!job) {

@@ -20,28 +20,11 @@ export async function GET(req: NextRequest) {
     const page = parseInt(searchParams.get("page") || "1");
     const pageSize = parseInt(searchParams.get("pageSize") || "20");
 
-    // Get user's job IDs
-    const userJobs = await prisma.job.findMany({
-      where: { userId: session.user.id },
-      select: { id: true },
-    });
-    const jobIds = userJobs.map(j => j.id);
-
-    if (jobIds.length === 0) {
-      return NextResponse.json({
-        success: true,
-        data: [],
-        total: 0,
-        page,
-        pageSize,
-        totalPages: 0,
-      });
-    }
-
     // Build application filter
-    const appWhere: Record<string, unknown> = {
-      jobId: jobId ? { equals: jobId } : { in: jobIds },
-    };
+    const appWhere: Record<string, unknown> = {};
+    if (jobId) {
+      appWhere.jobId = jobId;
+    }
 
     if (status) {
       appWhere.status = status;

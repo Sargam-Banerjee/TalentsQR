@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
     const pageSize = parseInt(searchParams.get("pageSize") || "20");
     const sortBy = searchParams.get("sortBy") || "newest";
 
-    const where: Record<string, unknown> = { userId: session.user.id };
+    const where: Record<string, unknown> = {};
 
     if (status) {
       where.status = status;

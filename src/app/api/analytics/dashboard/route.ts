@@ -11,9 +11,8 @@ export async function GET() {
 
     const userId = session.user.id;
 
-    // Get all jobs for this user
+    // Get all jobs for the recruitment dashboard
     const jobs = await prisma.job.findMany({
-      where: { userId },
       include: {
         applications: {
           include: {
