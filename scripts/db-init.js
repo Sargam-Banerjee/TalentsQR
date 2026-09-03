@@ -39,6 +39,20 @@ async function init() {
     } else {
       console.log(`✅ Database ready with ${userCount} user(s).`);
     }
+
+    const bcrypt = require("bcryptjs");
+    const demoPassword = await bcrypt.hash("demo1234", 10);
+    await prisma.user.upsert({
+      where: { email: "demo@talentsqr.com" },
+      update: { password: demoPassword },
+      create: {
+        email: "demo@talentsqr.com",
+        name: "Demo Recruiter",
+        password: demoPassword,
+        role: "RECRUITER",
+      },
+    });
+    console.log("✅ Demo account active: demo@talentsqr.com / demo1234");
   } catch (err) {
     console.warn("Database initialization note:", err.message);
   } finally {

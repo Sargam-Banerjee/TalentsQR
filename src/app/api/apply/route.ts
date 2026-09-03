@@ -288,6 +288,20 @@ export async function POST(req: NextRequest) {
       console.warn("Notification creation warning:", notifErr);
     }
 
+    // Send automated response confirmation email to candidate
+    try {
+      const { sendApplicationConfirmationEmail } = await import("@/lib/email");
+      await sendApplicationConfirmationEmail({
+        to: email,
+        candidateName: fullName,
+        jobTitle: job.title,
+        applicationId: application.id,
+      });
+      console.log(`[Apply] Automated confirmation email dispatched to candidate: ${email}`);
+    } catch (confEmailErr) {
+      console.warn("Candidate confirmation email note:", confEmailErr);
+    }
+
     return NextResponse.json({
       success: true,
       message: "Application submitted and processed successfully!",

@@ -217,3 +217,25 @@ export async function sendCandidateNoteEmail({
     simulated: true,
   };
 }
+
+export async function sendApplicationConfirmationEmail({
+  to,
+  candidateName,
+  jobTitle,
+  applicationId,
+}: {
+  to: string;
+  candidateName: string;
+  jobTitle: string;
+  applicationId: string;
+}): Promise<EmailSendResult> {
+  const noteContent = `Thank you for submitting your application for the ${jobTitle} position at TalentsQR.\n\nYour application reference code is: ${applicationId}\n\nOur AI-powered screening platform has processed your resume, and our recruitment team will be carefully reviewing your qualifications. We will keep you updated on the next steps in our hiring process.\n\nBest regards,\nTalentsQR Recruitment Team`;
+
+  return sendCandidateNoteEmail({
+    to,
+    candidateName,
+    recruiterName: "TalentsQR Recruitment Team",
+    noteContent,
+    jobTitle,
+  });
+}
