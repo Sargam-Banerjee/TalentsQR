@@ -81,7 +81,38 @@ export async function sendCandidateNoteEmail({
     </html>
   `;
 
-  // 1. Send via Resend if RESEND_API_KEY is configured
+  // 1. Send via Google Apps Script Webhook if configured (Bypasses Render firewall & requires no domain verification)
+  const webhookUrl = process.env.GMAIL_WEBHOOK_URL || process.env.GOOGLE_SCRIPT_URL;
+  if (webhookUrl) {
+    try {
+      const res = await fetch(webhookUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          to,
+          subject,
+          html: htmlContent,
+          text: `Hello ${candidateName},\n\nMessage from ${recruiterName}:\n\n${noteContent}\n\nBest regards,\nTalentsQR Team`,
+          candidateName,
+          recruiterName,
+        }),
+      });
+
+      if (res.ok) {
+        console.log("[EmailService] Real email delivered via Google Apps Script Webhook to:", to);
+        return {
+          success: true,
+          provider: "smtp",
+          messageId: `gscript_${Date.now()}`,
+          simulated: false,
+        };
+      }
+    } catch (whErr: any) {
+      console.warn("[EmailService] Google webhook delivery error:", whErr?.message);
+    }
+  }
+
+  // 2. Send via Resend if RESEND_API_KEY is configured
   if (resendApiKey) {
     try {
       const { Resend } = await import("resend");
@@ -136,7 +167,7 @@ export async function sendCandidateNoteEmail({
     }
   }
 
-  // 2. Send via SMTP if configured (Gmail, SendGrid, Brevo, AWS SES, etc.)
+  // 3. Send via SMTP if configured (Gmail, SendGrid, Brevo, AWS SES, etc.)
   if (host && user && pass) {
     try {
       const transporter = nodemailer.createTransport({
@@ -144,6 +175,10 @@ export async function sendCandidateNoteEmail({
         port,
         secure: port === 465,
         auth: { user, pass },
+        connectionTimeout: 5000,
+        greetingTimeout: 5000,
+        socketTimeout: 5000,
+        ...(process.env.SMTP_PROXY ? { proxy: process.env.SMTP_PROXY } : {}),
       });
 
       const info = await transporter.sendMail({

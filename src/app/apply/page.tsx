@@ -185,7 +185,7 @@ function ApplicationFormContent() {
             <span>Our AI screening system has received your resume and analyzed your qualifications for our hiring team.</span>
           </div>
 
-          <div className="pt-4 flex flex-col sm:flex-row items-center justify-center gap-4">
+          <div className="pt-4 flex justify-center">
             <button
               onClick={() => {
                 setSubmitted(false);
@@ -197,16 +197,10 @@ function ApplicationFormContent() {
                 setPortfolio("");
                 setSummary("");
               }}
-              className="px-6 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-white font-medium text-sm transition-all"
+              className="px-8 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-medium text-sm transition-all shadow-lg shadow-blue-600/20"
             >
               Submit Another Application
             </button>
-            <Link
-              href="/"
-              className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-medium text-sm transition-all flex items-center gap-2"
-            >
-              Back to Home <ArrowRight size={16} />
-            </Link>
           </div>
         </div>
       </div>
