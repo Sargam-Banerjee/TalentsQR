@@ -103,6 +103,16 @@ export async function sendCandidateNoteEmail({
           simulated: false,
         };
       }
+
+      if (data.error) {
+        console.warn("[EmailService] Resend delivery issue:", data.error);
+        return {
+          success: false,
+          provider: "resend",
+          error: data.error.message || "Resend delivery failed",
+          simulated: false,
+        };
+      }
     } catch (resendErr: any) {
       console.warn("[EmailService] Resend delivery error:", resendErr?.message);
     }

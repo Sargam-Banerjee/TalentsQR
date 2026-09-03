@@ -348,7 +348,7 @@ export async function PUT(
           const { sendCandidateNoteEmail } = await import("@/lib/email");
           const jobTitle = candidate.applications[0]?.job?.title;
 
-          await sendCandidateNoteEmail({
+          const emailResult = await sendCandidateNoteEmail({
             to: candidate.email,
             candidateName: candidate.fullName,
             recruiterName: session.user.name || "Recruiter",
@@ -356,7 +356,7 @@ export async function PUT(
             noteContent: body.note,
             jobTitle,
           });
-          emailSent = true;
+          emailSent = emailResult.success && !emailResult.simulated;
         } catch (emailErr) {
           console.warn("Could not email note to candidate:", emailErr);
         }
