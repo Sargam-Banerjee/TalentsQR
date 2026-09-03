@@ -226,18 +226,23 @@ Respond ONLY with valid JSON matching this exact structure:
   }
 
   async chat(messages: { role: string; content: string }[], context: string): Promise<string> {
-    const lastMessage = messages[messages.length - 1]?.content || "";
-    const prompt = `Context: ${context}\n\nUser Question: ${lastMessage}`;
+    const conversation = messages
+      .map(m => `${m.role === "user" ? "Recruiter" : "Assistant"}: ${m.content}`)
+      .join("\n\n");
+
+    const prompt = `REAL-TIME RECRUITMENT DATABASE & PIPELINE CONTEXT:\n${context}\n\nCONVERSATION:\n${conversation}\n\nAssistant:`;
 
     try {
       return await this.executeWithFallback(prompt, {
-        systemInstruction: `You are an expert technical recruiter assistant for TalentsQR. 
-Use the provided system context to answer user questions about jobs and candidates.
-Be helpful, analytical, concise, and professional.`
+        systemInstruction: `You are an expert technical recruiter assistant for TalentsQR.
+You have direct, live access to the TalentsQR applicant tracking system (ATS) and database provided in the real-time context.
+Always use this real-time context to answer questions about active jobs, candidate profiles, match scores, skills, and hiring pipeline metrics.
+Never claim you don't have access to the ATS or database—the live data is provided directly in your context.
+Be concise, data-driven, helpful, and professional.`
       });
     } catch (error: any) {
       console.warn("[GeminiProvider] Live AI chat failed, using fallback:", error?.message);
-      return `Based on your recruitment pipeline data:\n\n${context.slice(0, 400)}...\n\nLet me know if you would like me to assist with candidate filtering, interview question generation, or job description refinements!`;
+      return `Based on your recruitment pipeline data:\n\n${context.slice(0, 800)}...\n\nLet me know if you would like me to assist with candidate filtering, interview question generation, or job description refinements!`;
     }
   }
 
